@@ -26,14 +26,17 @@ def cargar_paradas_unidades():
 def cargar_inciidentes_diarios():
     # Definir el alcance de la API
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
-    # Usar el archivo de credenciales descargado desde Google Cloud
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials_services.json', scope)
-    
+
+    # Usar el archivo de credenciales descargado desde Google Cloud (ubicado en la misma carpeta que este script)
+    creds_path = 'credentials_services.json'  # Ruta al archivo de credenciales
+
     # Autenticarse con las credenciales
+    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+    
+    # Autorizar el cliente de Google Sheets
     client = gspread.authorize(creds)
     
-    # Abrir el Google Sheet
+    # Abrir el Google Sheet usando su clave
     sheet = client.open_by_key("17IFerZqnOsBBR27cVpDnTlWFT7NA2zgArHiMMxTQcR4")
     
     # Acceder a la primera hoja del documento
