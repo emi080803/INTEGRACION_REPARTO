@@ -24,8 +24,8 @@ def cargar_paradas_unidades():
 def cargar_incidentes_diarios():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-    # Leer el secreto desde la variable de entorno
-    credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')  # Cambiar según el nombre del secreto
+    # Leer el secreto desde Streamlit Secrets
+    credentials_json = st.secrets["google"]["GOOGLE_CREDENTIALS_JSON"]
     if credentials_json is None:
         raise ValueError("El secreto 'GOOGLE_CREDENTIALS_JSON' no está configurado correctamente.")
 
