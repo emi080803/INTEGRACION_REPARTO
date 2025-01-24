@@ -6,3 +6,4 @@ openpyxl
 folium
 matplotlib
 plotly
+streamlit_folium
