@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import os
 import folium
 from streamlit_folium import st_folium
-import matplotlib.pyplot as plt
 import plotly.express as px
+import datetime
 
 st.set_page_config(layout="wide")
 
@@ -33,39 +31,10 @@ def cargar_paradas_unidades():
 def cargar_paradas_unidades_coord():
     return pd.read_excel('data/PARADAS_UNIDADES_COORD.xlsx', index_col=None)
 
-# Función para cargar el archivo de Incidentes Diarios desde Google Sheets
+# Función para cargar el archivo de Incidentes Diarios desde un archivo Excel
 @st.cache_data
 def cargar_incidentes_diarios():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-    # Leer el secreto desde Streamlit Secrets
-    credentials_json = st.secrets["google"]["GOOGLE_CREDENTIALS_JSON"]
-    if credentials_json is None:
-        raise ValueError("El secreto 'GOOGLE_CREDENTIALS_JSON' no está configurado correctamente.")
-
-    # Escribir el contenido del secreto en un archivo temporal
-    creds_path = "temp_credentials.json"
-    with open(creds_path, 'w') as f:
-        f.write(credentials_json)
-
-    # Autenticarse con el archivo de credenciales
-    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
-    client = gspread.authorize(creds)
-
-    # Abrir el Google Sheet usando su clave
-    sheet = client.open_by_key("17IFerZqnOsBBR27cVpDnTlWFT7NA2zgArHiMMxTQcR4")
-
-    # Acceder a la primera hoja del documento
-    worksheet = sheet.get_worksheet(0)
-
-    # Obtener todos los valores de la hoja
-    data = worksheet.get_all_records()
-
-    # Eliminar el archivo temporal por seguridad
-    os.remove(creds_path)
-
-    # Convertir los datos en un DataFrame
-    return pd.DataFrame(data).reset_index(drop=True)
+    return pd.read_excel('data/eventos_diario.xlsx', index_col=None)
 
 # Cargar los datos
 df_paradas = cargar_paradas_unidades()
@@ -82,22 +51,20 @@ unidad_seleccionada = st.selectbox(
     key="unidad_selector"
 )
 
-# Selector para elegir entre Informe Diario y Mensual
-modo_informe = st.radio(
-    "Selecciona el tipo de informe:",
-    ("Informe Diario", "Informe Mensual"),
-    key="modo_informe"
-)
-
-# Cargar el DataFrame correspondiente al modo seleccionado
-if modo_informe == "Informe Diario":
-    df_unidades = cargar_informe_unidades().reset_index(drop=True)
-else:
-    df_unidades = cargar_informe_mensual_unidades().reset_index(drop=True)
-
 # Mostrar datos según la unidad seleccionada
 if unidad_seleccionada == "Todas":
     st.subheader("Información General de Unidades")
+    # Selector para elegir entre Informe Diario y Mensual
+    modo_informe = st.radio(
+        "Selecciona el tipo de informe de seguridad:",
+        ("Informe Diario", "Informe Mensual"),
+        key="modo_informe"
+    )
+    # Cargar el DataFrame correspondiente al modo seleccionado
+    if modo_informe == "Informe Diario":
+        df_unidades = cargar_informe_unidades().reset_index(drop=True)
+    else:
+        df_unidades = cargar_informe_mensual_unidades().reset_index(drop=True)
 
     columnas_predeterminadas = ['Número de unidad', 'Operador', 'Modelo', 'Distancia total km', 'Combustible consumido (L)', 'Puntuación de seguridad']
     columnas_disponibles = list(df_unidades.columns.difference(columnas_predeterminadas))
@@ -124,13 +91,18 @@ if unidad_seleccionada == "Todas":
     st.plotly_chart(fig, use_container_width=True)
 
 else:
-    st.subheader(f"Detalles de la Unidad: {unidad_seleccionada}")
-
-    info_basica = df_unidades[df_unidades['Número de unidad'] == unidad_seleccionada][['Operador', 'Modelo']]
-    st.subheader("Información de la Unidad")
-    st.table(info_basica)
-
     st.subheader("Informe de la Unidad")
+    # Cargar el DataFrame correspondiente al modo seleccionado
+    modo_informe = st.radio(
+        "Selecciona el tipo de informe de seguridad:",
+        ("Informe Diario", "Informe Mensual"),
+        key="modo_informe"
+    )
+
+    if modo_informe == "Informe Diario":
+        df_unidades = cargar_informe_unidades().reset_index(drop=True)
+    else:
+        df_unidades = cargar_informe_mensual_unidades().reset_index(drop=True)
 
     unidad_info = df_unidades[df_unidades['Número de unidad'] == unidad_seleccionada]
     columnas_predeterminadas = ['Número de unidad', 'Operador', 'Modelo', 'Distancia total km', 'Combustible consumido (L)', 'Puntuación de seguridad']
@@ -146,17 +118,72 @@ else:
     columnas_finales = columnas_predeterminadas + columnas_seleccionadas
     st.write(unidad_info[columnas_finales].reset_index(drop=True))
 
+    # Selector para elegir entre eventos mensuales o diarios
+    tipo_eventos = st.radio(
+        "Selecciona el periodo de tiempo para los eventos de seguridad:",
+        ("Día Anterior", "Acumulado Mensual"),
+        key="tipo_eventos"
+    )
+
+    # Cargar el DataFrame correspondiente al tipo de eventos seleccionado
+    if tipo_eventos == "Día Anterior":
+        df_eventos = cargar_incidentes_diarios().reset_index(drop=True)
+    else:
+        df_eventos = pd.read_excel('data/eventos_mensual.xlsx', index_col=None).reset_index(drop=True)
+
+    # Filtrar los incidentes para la unidad seleccionada
+    incidentes_info = df_eventos[df_eventos['Unidad'] == unidad_seleccionada]
+
+    # Verificar si hay incidentes para la unidad seleccionada
+    if not incidentes_info.empty:
+        # Filtrar solo las columnas necesarias para mostrar en la tabla
+        columnas_mostrar = ['Tipo de evento', 'Operador', 'Hora', 'Unidad']
+        st.write(f"{tipo_eventos} de la Unidad {unidad_seleccionada}", incidentes_info[columnas_mostrar].reset_index(drop=True))
+
+        # Mostrar los videos correspondientes utilizando las columnas originales
+        for _, row in incidentes_info.iterrows():
+            st.subheader(f"Incidente: {row['Tipo de evento']} ----- Hora: {row['Hora']}")
+
+            # Video Interior
+            if pd.notna(row['video_Interior']) and row['video_Interior'] != "No video URL":
+                st.write("**Video Interior**")
+                video_url_interior = row['video_Interior']
+                st.markdown(f'<video width="640" height="360" controls><source src="{video_url_interior}" type="video/mp4"></video>', unsafe_allow_html=True)
+            else:
+                st.write("**No hay video interior disponible.**")
+
+            # Video Exterior
+            if pd.notna(row['video_Exterior']) and row['video_Exterior'] != "No video URL":
+                st.write("**Video Exterior**")
+                video_url_exterior = row['video_Exterior']
+                st.markdown(f'<video width="640" height="360" controls><source src="{video_url_exterior}" type="video/mp4"></video>', unsafe_allow_html=True)
+            else:
+                st.write("**No hay video exterior disponible.**")
+
+    else:
+        st.write(f"No se encontraron incidentes para la Unidad {unidad_seleccionada}.")
+
+    # Mostrar paradas de la unidad seleccionada con el estilo aplicado
     if str(unidad_seleccionada) in df_paradas:
-        paradas_info = df_paradas[str(unidad_seleccionada)]
-        st.write(f"Paradas de la Unidad {unidad_seleccionada}", paradas_info.reset_index(drop=True))
+        paradas_info = df_paradas[str(unidad_seleccionada)].reset_index(drop=True)
+        
+        # Convertir la columna 'tiempo_espera' a timedelta si no lo es
+        paradas_info['tiempo_espera'] = pd.to_timedelta(paradas_info['tiempo_espera'], errors='coerce')
+        
+        # Formatear la columna 'tiempo_espera' para mostrar solo horas, minutos y segundos
+        paradas_info['tiempo_espera'] = paradas_info['tiempo_espera'].apply(lambda x: str(x).split()[2] if pd.notna(x) else '00:00:00')
+        
+        # Aplicar el estilo solo a las filas con 'tiempo_espera' mayor a 20 minutos
+        paradas_info_styled = paradas_info.style.applymap(
+            lambda val: 'background-color: red' if isinstance(val, str) and pd.to_timedelta(val) > pd.Timedelta(minutes=20) else '',
+            subset=['tiempo_espera']
+        )
+        
+        st.write(f"Paradas de la Unidad {unidad_seleccionada}", paradas_info_styled)
     else:
         st.write(f"No se encontraron paradas para la Unidad {unidad_seleccionada}.")
 
-    incidentes_info = df_incidentes[df_incidentes['Unidad'] == unidad_seleccionada]
-    if not incidentes_info.empty:
-        st.write(f"Incidentes de la Unidad {unidad_seleccionada}", incidentes_info.reset_index(drop=True))
-    else:
-        st.write(f"No se encontraron incidentes para la Unidad {unidad_seleccionada}.")
+
 
     st.subheader("Mapa de Paradas")
 
